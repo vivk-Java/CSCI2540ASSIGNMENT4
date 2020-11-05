@@ -7,6 +7,7 @@ public class Calculator {
     private final String infixExpression;
     private String postfixExpression;
     private boolean isPrevOperand = false;
+    private boolean isPrevOperator = false;
 
     public Calculator(String expression) {
         infixExpression = expression.replaceAll(",", ".").strip();
@@ -14,14 +15,17 @@ public class Calculator {
     }
 
     private boolean convertPostfix() {
+        if (!infixVerify()) {
+            return false;
+        }
+
         Stack<Character> stack = new Stack<Character>();
         StringBuilder postfixExpression = new StringBuilder();
 
         char[] infixArray = infixExpression.toCharArray();
 
-        for (var character: infixArray) {
-            if (character == ' ' || character == '\t' || character == '\n'
-                    || character == '\r' || character == '\0') {
+        for (char character : infixArray) {
+            if (isWhitespace(character)) {
                 continue;
             }
 
@@ -33,8 +37,8 @@ public class Calculator {
                     appendInPostfix(postfixExpression, stack.pop());
                 }
 
-                stack.push(character);
                 isPrevOperand = false;
+                stack.push(character);
             } else if (isOpeningParentheses(character)) {
                 stack.push(character);
             } else if (isClosingParentheses(character)) {
@@ -55,16 +59,20 @@ public class Calculator {
     }
 
     public double evaluate() {
+        if (this.postfixExpression.isEmpty() || this.postfixExpression.isBlank()) {
+            throw new IllegalStateException();
+        }
+
         Stack<Double> stack = new Stack<Double>();
         StringBuilder string = new StringBuilder();
         var temporal = this.postfixExpression + ' ';
-        char[] postfixExpression = temporal.toCharArray();
+        char[] postfixArray = temporal.toCharArray();
 
-        for (int i = 0; i < postfixExpression.length; i++){
+        for (int i = 0; i < postfixArray.length; i++){
             string.delete(0, string.length());
 
-            while(postfixExpression[i] != ' ') {
-                string.append(postfixExpression[i]);
+            while(postfixArray[i] != ' ') {
+                string.append(postfixArray[i]);
                 i++;
             }
 
@@ -73,9 +81,8 @@ public class Calculator {
             } else {
                 try {
                     stack.push(calculate(string.charAt(0), stack.pop(), stack.pop()));
-                } catch (EmptyStackException e) {
+                } catch (IllegalStateException e) {
                     exit("Problem with operators.");
-                    System.exit(1);
                 }
             }
         }
@@ -83,7 +90,7 @@ public class Calculator {
         return stack.pop();
     }
 
-    private double calculate(Character operator, Double firstValue, Double secondValue){
+    private double calculate(Character operator, Double firstValue, Double secondValue) {
         if (operator == '+') {
             return secondValue + firstValue;
         } else if (operator == '-') {
@@ -95,6 +102,118 @@ public class Calculator {
         }
 
         return 0;
+    }
+
+    private boolean infixVerify() {
+        Stack<Character> stackCharacter = new Stack<Character>();
+        Stack<Integer> stackIndex = new Stack<Integer>();
+
+        boolean isPrevClosingParentheses = false;
+        boolean isPrevOpeningParentheses = false;
+        boolean isPrevWhitespace = false;
+        boolean isPrevOperator = false;
+        boolean isPrevOperand = false;
+        boolean isFirst = true;
+
+
+        char[] infixArray = infixExpression.toCharArray();
+        for (int i = 0; i < infixArray.length; i++) {
+            var character = infixArray[i];
+            if (isWhitespace(character)) {
+                isPrevWhitespace = true;
+                continue;
+            }
+
+            var isClosingParentheses = isClosingParentheses(character);
+            var isOpeningParentheses = isOpeningParentheses(character);
+            var isOperator = isOperator(character);
+            var isOperand = isOperand(character);
+
+            if (isPrevOperator && isOperator) {
+                exit(verifyError(this.infixExpression, "Second operator in row!", i));
+                return false;
+            }
+
+            if (isOperator && isFirst) {
+                exit(verifyError(this.infixExpression, "Operator before operand!", i));
+                return false;
+            }
+
+            if (isPrevOperand && isOperand && isPrevWhitespace ||
+                    isOperand && isPrevClosingParentheses) {
+                exit(verifyError(this.infixExpression, "Second operand in row!", i));
+                return false;
+            }
+
+            if (isOperator && isPrevOpeningParentheses) {
+                 exit(verifyError(this.infixExpression, "Operator after opening bracket!", i));
+                 return false;
+            }
+
+            if (isOpeningParentheses) {
+                if (isPrevOperand) {
+                    exit(verifyError(this.infixExpression, "Opening bracket after operand!", i));
+                    return false;
+                }
+
+                stackCharacter.push(character);
+                stackIndex.push(i);
+            }
+
+            if (isClosingParentheses) {
+                if (isPrevOperator) {
+                    exit(verifyError(this.infixExpression, "Operator before closing bracket!", i - 1));
+                    return false;
+                }
+
+                if (isPrevOpeningParentheses) {
+                    exit(verifyError(this.infixExpression, "Empty bracket!", i - 1));
+                    return false;
+                }
+
+                if (stackCharacter.empty()) {
+                    exit(verifyError(this.infixExpression, "Extra closing bracket!", i));
+                    return false;
+                }
+
+                stackCharacter.pop();
+                stackIndex.pop();
+            }
+
+            if (!isClosingParentheses && !isOpeningParentheses && !isOperator && !isOperand) {
+                exit(verifyError(this.infixExpression, "Unknown character!", i));
+                return false;
+            }
+
+            isPrevClosingParentheses = isClosingParentheses;
+            isPrevOpeningParentheses = isOpeningParentheses;
+            isPrevOperator = isOperator;
+            isPrevOperand = isOperand;
+            isPrevWhitespace = false;
+            isFirst = false;
+        }
+
+        while (!stackCharacter.empty()) {
+            exit(verifyError(this.infixExpression, "Extra opening bracket!", stackIndex.firstElement()));
+            return false;
+        }
+
+        return true;
+    }
+
+    private String verifyError(String source, String error, Integer index) {
+        Integer extraIndex = 9;
+
+        String secondPart = " ".repeat(Math.max(0, index + extraIndex)) +
+                "^";
+        String thirdPart = " ".repeat(extraIndex) +
+                error;
+        return source + '\n' + secondPart + '\n' + thirdPart;
+    }
+
+    private boolean isWhitespace(Character character) {
+        return character == ' ' || character == '\t' || character == '\n'
+                || character == '\r' || character == '\0';
     }
 
     private boolean isNumeric(String number)  {
@@ -118,11 +237,11 @@ public class Calculator {
     }
 
     private boolean isOpeningParentheses(char character) {
-        return character == '(' || character == '{' || character == '[';
+        return character == '(';
     }
 
     private boolean isClosingParentheses(char character) {
-        return character == ')' || character == '}' || character == ']';
+        return character == ')';
     }
 
     private int getOperatorWeight(char operator) {
@@ -147,21 +266,27 @@ public class Calculator {
     }
 
     private void appendInPostfix(StringBuilder stringBuilder, char character) {
+        boolean isOperator = isOperator(character);
         boolean isOperand = isOperand(character);
-        if (isOperand != this.isPrevOperand) {
+        if (isOperand != this.isPrevOperand || isOperator && this.isPrevOperator) {
             stringBuilder.append(' ');
         }
 
         stringBuilder.append(character);
+        this.isPrevOperator = isOperator;
         this.isPrevOperand = isOperand;
     }
 
     private void exit(String errorMessage){
         System.err.println("ERROR -> " + errorMessage);
-        System.exit(1);
     }
 
     public String getPostfix() {
+        if (this.postfixExpression == null ||this.postfixExpression.isEmpty()
+                || this.postfixExpression.isBlank()) {
+            throw new IllegalStateException();
+        }
+
         return postfixExpression.toString();
     }
 
